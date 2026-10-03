@@ -20,7 +20,7 @@ class Stmt {
   async all(){ return { results: this._prep().all(...this.args), success: true }; }
 }
 
-export function makeD1(schemaPath = new URL('../schema.sql', import.meta.url)){
+export function makeD1(schemaPath = new URL('./schema.sql', import.meta.url)){
   const db = new DatabaseSync(':memory:');
   db.exec(readFileSync(schemaPath, 'utf8'));
   return {

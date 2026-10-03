@@ -2,8 +2,8 @@
    in-memory SQLite standing in for D1. No wrangler, no network. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRequest, originAllowed, redirectAllowed, memoryLimit, _resetMemoryLimit } from '../src/worker.js';
-import { signJWT, verifyJWT, mintSession, b64uEncode, emailAllowed } from '../src/auth.js';
+import { handleRequest, originAllowed, redirectAllowed, memoryLimit, _resetMemoryLimit } from './worker.js';
+import { signJWT, verifyJWT, mintSession, b64uEncode, emailAllowed } from './auth.js';
 import { makeD1 } from './d1.mjs';
 
 const ORIGIN = 'https://tangent.fit';
