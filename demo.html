@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>login — end-to-end check</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<!-- A single page that walks the whole system: health, sign-in, session,
+     per-user quota, non-streaming and streaming calls. Serve it from an origin
+     in ALLOWED_ORIGINS (e.g. `npx http-server -p 8077`) and work top to bottom.
+     With DEV_AUTH on you can sign in as anyone, which is the fastest way to
+     watch a quota run out without burning your own. -->
+<style>
+  :root { color-scheme: dark; --line:#2a3340; --dim:#8fa0b4; --acc:#8fd0ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:2rem 1.25rem 4rem; background:#0b0e14; color:#dfe6ef;
+         font:14px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace; }
+  main { max-width: 720px; margin: 0 auto; }
+  h1 { font-size:15px; letter-spacing:.12em; text-transform:uppercase; color:var(--acc); margin:0 0 .35rem; }
+  p.sub { color:var(--dim); margin:0 0 1.75rem; }
+  section { border:1px solid var(--line); border-radius:10px; padding:1rem 1.1rem; margin-bottom:1rem;
+            background:rgba(255,255,255,.02); }
+  h2 { font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--dim); margin:0 0 .75rem; }
+  button { font:inherit; color:#dfe6ef; background:rgba(143,208,255,.10); cursor:pointer;
+           border:1px solid rgba(143,208,255,.32); border-radius:7px; padding:.45rem .8rem; margin:0 .35rem .35rem 0; }
+  button:hover { background:rgba(143,208,255,.2); }
+  button:disabled { opacity:.4; cursor:default; }
+  input { font:inherit; color:#dfe6ef; background:rgba(255,255,255,.05); border:1px solid var(--line);
+          border-radius:7px; padding:.45rem .6rem; width:15rem; }
+  pre { white-space:pre-wrap; word-break:break-word; background:rgba(0,0,0,.35); border:1px solid var(--line);
+        border-radius:7px; padding:.7rem .8rem; margin:.6rem 0 0; min-height:2.6rem; font-size:13px; }
+  .ok { color:#7cc99a; } .bad { color:#ff9a9a; } .dim { color:var(--dim); }
+  .bar { height:6px; background:rgba(255,255,255,.08); border-radius:3px; overflow:hidden; margin-top:.5rem; }
+  .bar > i { display:block; height:100%; background:var(--acc); width:0; transition:width .25s; }
+</style>
+
+<main>
+  <h1>login</h1>
+  <p class="sub">End-to-end check. Work down the page; each step needs the one above it.</p>
+
+  <section>
+    <h2>1 · Gateway</h2>
+    <input id="base" placeholder="https://login.…workers.dev">
+    <button id="bHealth">Check health</button>
+    <pre id="health" class="dim">Enter your Worker URL and check health.</pre>
+  </section>
+
+  <section>
+    <h2>2 · Sign in</h2>
+    <div>
+      <input id="as" placeholder="sign in as… (dev only)" value="alice">
+      <button id="bDev">Dev sign-in</button>
+      <button id="bGoogle">Google</button>
+      <button id="bApple">Apple</button>
+      <button id="bOut">Sign out</button>
+    </div>
+    <pre id="who" class="dim">Not signed in.</pre>
+  </section>
+
+  <section>
+    <h2>3 · Quota</h2>
+    <button id="bMe">Refresh</button>
+    <div class="bar"><i id="bar"></i></div>
+    <pre id="quota" class="dim">Sign in first.</pre>
+  </section>
+
+  <section>
+    <h2>4 · Ask Claude</h2>
+    <input id="q" value="Say hello in exactly five words." style="width:22rem">
+    <button id="bAsk">Send</button>
+    <button id="bStream">Stream</button>
+    <button id="bBurn">Burn quota (10×)</button>
+    <pre id="out" class="dim">Waiting.</pre>
+  </section>
+</main>
+
+<script type="module">
+import { ClaudeClient } from './client/claude-client.js';
+
+const $ = id => document.getElementById(id);
+const set = (el, text, cls) => { el.textContent = text; el.className = cls || ''; };
+const BASE_KEY = 'claude_gateway_demo_base';
+
+$('base').value = localStorage.getItem(BASE_KEY) || '';
+let claude = null;
+
+function client(){
+  const base = $('base').value.trim();
+  if (!base) throw new Error('Enter the gateway URL first.');
+  localStorage.setItem(BASE_KEY, base);
+  if (!claude || claude.baseUrl !== base.replace(/\/+$/, '')){
+    claude = new ClaudeClient({
+      baseUrl: base,
+      model: 'claude-haiku-4-5',
+      maxTokens: 256,
+      onAuthRequired: () => set($('who'), 'Session expired — sign in again.', 'bad'),
+      onQuotaExceeded: e => set($('quota'), e.message, 'bad'),
+    });
+    // A redirect-mode login comes back with the token in the fragment.
+    try { claude.captureRedirect(); } catch (e){ set($('who'), String(e.message), 'bad'); }
+  }
+  return claude;
+}
+
+async function refreshMe(){
+  const c = client();
+  if (!c.isSignedIn){ set($('who'), 'Not signed in.', 'dim'); set($('quota'), 'Sign in first.', 'dim');
+                      $('bar').style.width = '0'; return; }
+  try {
+    const { user, quota } = await c.me();
+    set($('who'), 'Signed in as ' + (user.email || user.id) + '\n' + user.id, 'ok');
+    set($('quota'), quota.used + ' of ' + quota.limit + ' used today · ' + quota.remaining
+      + ' left\nresets ' + quota.resetsAt, quota.remaining > 0 ? 'ok' : 'bad');
+    $('bar').style.width = Math.min(100, (quota.used / Math.max(1, quota.limit)) * 100) + '%';
+  } catch (e){ set($('who'), e.message, 'bad'); }
+}
+
+$('bHealth').onclick = async () => {
+  try {
+    const h = await client().health();
+    const lines = [
+      'key           ' + (h.keyConfigured ? 'ok' : 'MISSING'),
+      'sessionSecret ' + (h.sessionSecretConfigured ? 'ok' : 'MISSING'),
+      'database      ' + (h.databaseBound ? 'ok' : 'MISSING'),
+      'providers     ' + (h.providers.join(', ') || 'none'),
+      'your origin   ' + (h.yourOriginAllowed ? 'allowed' : 'NOT in ALLOWED_ORIGINS'),
+      'daily limit   ' + h.defaultDailyLimit,
+    ];
+    if (h.warning) lines.push('', '⚠ ' + h.warning);
+    const good = h.keyConfigured && h.sessionSecretConfigured && h.databaseBound && h.yourOriginAllowed;
+    set($('health'), lines.join('\n'), good ? 'ok' : 'bad');
+    $('bDev').disabled = !h.providers.includes('dev');
+    $('bGoogle').disabled = !h.providers.includes('google');
+    $('bApple').disabled = !h.providers.includes('apple');
+    refreshMe();
+  } catch (e){ set($('health'), e.message, 'bad'); }
+};
+
+const doLogin = provider => async () => {
+  try {
+    const c = client();
+    const extra = provider === 'dev' && $('as').value.trim()
+      ? '&as=' + encodeURIComponent($('as').value.trim()) : '';
+    // login() builds the URL itself; for the dev `as` parameter we point it at
+    // a redirect_uri of our own page and let the client handle the popup.
+    await c.login(provider + extra.replace('&as=', '&as='), { mode: 'popup' });
+    await refreshMe();
+  } catch (e){ set($('who'), e.message, 'bad'); }
+};
+// `as` rides along on the provider string, which login() URL-encodes as one
+// value — so build the URL directly for dev, and use login() for the rest.
+$('bDev').onclick = async () => {
+  try {
+    const c = client();
+    const as = $('as').value.trim();
+    const url = c.baseUrl + '/auth/login?provider=dev'
+      + (as ? '&as=' + encodeURIComponent(as) : '')
+      + '&redirect_uri=' + encodeURIComponent(location.href.split('#')[0]) + '&mode=popup';
+    const w = window.open(url, 'gw-login', 'width=520,height=680');
+    if (!w) throw new Error('Popup blocked.');
+    const token = await new Promise((res, rej) => {
+      const onMsg = ev => {
+        if (ev.origin !== new URL(c.baseUrl).origin) return;
+        const d = ev.data;
+        if (!d || d.type !== 'claude-gateway-auth') return;
+        removeEventListener('message', onMsg); clearInterval(t);
+        d.ok ? res(d.token) : rej(new Error(d.error || 'Sign-in failed.'));
+      };
+      addEventListener('message', onMsg);
+      const t = setInterval(() => { if (w.closed){ clearInterval(t); removeEventListener('message', onMsg);
+        rej(new Error('Window closed.')); } }, 500);
+    });
+    c._store(token);
+    await refreshMe();
+  } catch (e){ set($('who'), e.message, 'bad'); }
+};
+$('bGoogle').onclick = doLogin('google');
+$('bApple').onclick = doLogin('apple');
+$('bOut').onclick = () => { client().logout(); refreshMe(); };
+$('bMe').onclick = refreshMe;
+
+$('bAsk').onclick = async () => {
+  set($('out'), 'Thinking…', 'dim');
+  try {
+    const j = await client().messages({ messages: [{ role: 'user', content: $('q').value }] });
+    set($('out'), (j.content || []).map(b => b.text || '').join(''), 'ok');
+  } catch (e){ set($('out'), e.message, 'bad'); }
+  refreshMe();
+};
+
+$('bStream').onclick = async () => {
+  set($('out'), '', 'ok');
+  try {
+    await client().stream({ messages: [{ role: 'user', content: $('q').value }] },
+      { onText: t => { $('out').textContent += t; } });
+  } catch (e){ set($('out'), e.message, 'bad'); }
+  refreshMe();
+};
+
+// The fastest way to see the quota actually bite.
+$('bBurn').onclick = async () => {
+  const c = client();
+  let ok = 0, stopped = '';
+  for (let i = 0; i < 10; i++){
+    try { await c.messages({ max_tokens: 16, messages: [{ role: 'user', content: 'hi' }] }); ok++; }
+    catch (e){ stopped = e.message; break; }
+  }
+  set($('out'), ok + ' succeeded' + (stopped ? '\nthen: ' + stopped : ''), stopped ? 'bad' : 'ok');
+  refreshMe();
+};
+
+if ($('base').value) $('bHealth').click();
+</script>
+</html>

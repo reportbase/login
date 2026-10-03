@@ -1,0 +1,111 @@
+name = "login"
+main = "src/worker.js"
+compatibility_date = "2025-05-01"
+
+# ── Database (required) ─────────────────────────────────────────────────────
+# Holds users and per-day usage. The database already exists; on a fresh one,
+# load the schema (safe to re-run — everything is IF NOT EXISTS):
+#   npx wrangler d1 execute login --remote --file=./schema.sql
+#   The id below is an identifier, not a credential — it belongs in this file.
+[[d1_databases]]
+binding = "DB"
+database_name = "login"
+database_id = "94eaceab-16af-4375-921f-ddd26fb092c8"
+
+[vars]
+
+# WHO may call, and where a freshly minted session may be delivered. This is
+# both the CORS allowlist and the OAuth redirect allowlist — an unlisted origin
+# cannot receive a token, which is what stops this becoming an open redirect.
+#   https://app.example.com   exact          https://*.example.com   subdomains
+ALLOWED_ORIGINS = "https://tangent.fit,https://*.tangent.fit,http://localhost:8077"
+
+# Messages per signed-in user per UTC day. This is the real cost control.
+# Override one person in SQL: UPDATE users SET daily_limit = 500 WHERE email = '…';
+#
+# NOTE: every request counts as one, regardless of what it costs you. A chess
+# comment is a few hundred tokens; one AI drawing is up to 16000 output tokens
+# plus an image — two or three orders of magnitude more. If both apps share
+# this gateway, price the limit against the EXPENSIVE one, or give the drawing
+# app its own Worker with its own limit.
+DEFAULT_DAILY_LIMIT = "50"
+
+# Per-IP requests per minute, checked BEFORE authentication. A blunt instrument
+# aimed at scripts and scrapers, not at people. 0 disables.
+BURST_PER_MIN = "20"
+
+# How long a sign-in lasts before the user must log in again (silently, via the
+# provider, if they are still signed in there).
+SESSION_DAYS = "30"
+
+# Refuse accounts whose provider says the email is unverified.
+REQUIRE_VERIFIED_EMAIL = "true"
+
+# WHO may hold an account. Empty = anyone who can sign in with Google/Apple.
+# Entries are a full address, or '@domain.com' for everyone at that domain:
+#   ALLOWED_EMAILS = "@tangent.fit,afriend@gmail.com"
+# Checked after the provider proves who they are and BEFORE any row is created,
+# so a refused sign-in leaves nothing behind in D1.
+ALLOWED_EMAILS = ""
+
+# ── DEV SIGN-IN STUB ────────────────────────────────────────────────────────
+# "true" adds a `dev` provider that mints a real session for a made-up person
+# WITHOUT contacting Google, so the app, the quota and the proxy can all be
+# finished before any OAuth credentials exist:
+#     /auth/login?provider=dev&redirect_uri=…            -> dev@example.test
+#     /auth/login?provider=dev&as=alice&redirect_uri=…   -> alice@example.test
+#
+# ANYONE who can reach an allowlisted origin can then sign in as ANYONE.
+# ALLOWED_EMAILS does NOT contain this: the stub proves nothing about identity,
+# so naming an allowlisted address is all it takes to become that person. If you
+# want to keep the stub on a public deployment, set the secret below instead —
+# then the caller must know it:
+#   npx wrangler secret put DEV_AUTH_TOKEN
+#   /auth/login?provider=dev&token=<secret>&as=alice&redirect_uri=...
+# Otherwise set this to "false" before a single real user touches it. /health
+# reports devAuth:true and a warning while it is on, so you cannot leave it
+# enabled without being told.
+DEV_AUTH = "true"
+
+# Cost guards on the request itself.
+ALLOWED_MODELS = ""            # empty = any model your key can reach
+
+# Ceiling on max_tokens; requests above it are CLAMPED, not rejected — so a cap
+# set too low does not error, it silently truncates the answer. 16000 exists
+# because the SVG app asks for that much to draw a whole picture; a chess
+# comment uses a few hundred. Lower it and long generations get cut off mid-SVG.
+MAX_TOKENS_CAP = "16000"
+
+# Largest accepted request body. 4 MB because apps that send an image (the SVG
+# canvas goes up as a ~768px base64 PNG) blow straight past a 256 KB limit.
+MAX_BODY_BYTES = "4194304"
+ALLOWED_PATHS = "/v1/messages,/v1/messages/count_tokens,/v1/models"
+
+# Permit callers with no Origin header (curl, servers, native apps). They still
+# need a valid session; this only relaxes the browser-origin check.
+ALLOW_NO_ORIGIN = "false"
+
+# ── Edge-accurate burst limiting (recommended once you have real traffic) ───
+# The built-in counter lives inside one Worker isolate, so the true ceiling is
+# roughly (isolates x limit). Cloudflare's native binding counts across the
+# whole edge and costs nothing.
+#
+# [[unsafe.bindings]]
+# name = "RATE_LIMITER"
+# type = "ratelimit"
+# namespace_id = "1001"
+# simple = { limit = 20, period = 60 }
+
+# ── Secrets — set with `wrangler secret put`, never written in this file ────
+#   npx wrangler secret put ANTHROPIC_API_KEY     your Anthropic key
+#   npx wrangler secret put SESSION_SECRET        long random string; signs sessions
+#   npx wrangler secret put DEV_AUTH_TOKEN        optional; gates the dev stub
+#   (Google/Apple are OPTIONAL while DEV_AUTH is on)
+#   npx wrangler secret put GOOGLE_CLIENT_ID
+#   npx wrangler secret put GOOGLE_CLIENT_SECRET
+#   npx wrangler secret put APPLE_CLIENT_ID       the Services ID, e.g. fit.tangent.web
+#   npx wrangler secret put APPLE_TEAM_ID
+#   npx wrangler secret put APPLE_KEY_ID
+#   npx wrangler secret put APPLE_PRIVATE_KEY     contents of the .p8 file
+#
+# Rotating SESSION_SECRET signs everyone out. That is the emergency stop.
