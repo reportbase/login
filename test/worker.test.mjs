@@ -2,8 +2,8 @@
    in-memory SQLite standing in for D1. No wrangler, no network. */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { handleRequest, originAllowed, redirectAllowed, memoryLimit, _resetMemoryLimit } from '../src/worker.js';
-import { signJWT, verifyJWT, mintSession, b64uEncode, emailAllowed } from '../src/auth.js';
+import { handleRequest, originAllowed, redirectAllowed, memoryLimit, _resetMemoryLimit } from '../worker.js';
+import { signJWT, verifyJWT, mintSession, b64uEncode, emailAllowed } from '../auth.js';
 import { makeD1 } from './d1.mjs';
 
 const ORIGIN = 'https://tangent.fit';
@@ -628,4 +628,24 @@ test('health reports whether signup is restricted and the stub is gated', async 
   assert.equal(shut.devAuthTokenRequired, true);
   assert.ok(shut.features.includes('email-allowlist'));
   db._close();
+});
+
+/* The deployed allowlist itself, read from wrangler.toml rather than a copy in
+   this file, so a change there is what gets tested. The owner's GitHub Pages
+   site signs in (games, draw and 3d live there); other people's github.io
+   sites, and look-alike hosts, do not. */
+test('wrangler.toml allows the GitHub Pages site and no other github.io', async () => {
+  const { readFileSync } = await import('node:fs');
+  const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  const m = toml.match(/^ALLOWED_ORIGINS\s*=\s*"([^"]*)"/m);
+  assert.ok(m, 'ALLOWED_ORIGINS not found in wrangler.toml');
+  const rules = m[1].split(',').map(s => s.trim()).filter(Boolean);
+  assert.equal(originAllowed('https://reportbase.github.io', rules), true);
+  assert.equal(redirectAllowed('https://reportbase.github.io/3d/3d.html', rules), true);
+  assert.equal(redirectAllowed('https://reportbase.github.io/draw/draw.html?lab=1', rules), true);
+  assert.equal(originAllowed('https://tangent.fit', rules), true);
+  assert.equal(originAllowed('https://someone-else.github.io', rules), false);
+  assert.equal(originAllowed('https://reportbase.github.io.evil.com', rules), false);
+  assert.equal(originAllowed('http://reportbase.github.io', rules), false);
+  assert.ok(!rules.some(r => /\*\.github\.io$/.test(r)), 'never allow *.github.io');
 });
