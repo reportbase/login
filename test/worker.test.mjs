@@ -648,4 +648,6 @@ test('wrangler.toml allows the GitHub Pages site and no other github.io', async 
   assert.equal(originAllowed('https://reportbase.github.io.evil.com', rules), false);
   assert.equal(originAllowed('http://reportbase.github.io', rules), false);
   assert.ok(!rules.some(r => /\*\.github\.io$/.test(r)), 'never allow *.github.io');
+  // Public pages sign in here now, so the no-password dev stub must stay off.
+  assert.match(toml, /^DEV_AUTH\s*=\s*"false"/m, 'DEV_AUTH must be "false" in the deployed config');
 });

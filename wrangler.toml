@@ -70,7 +70,10 @@ ALLOWED_EMAILS = ""
 # Otherwise set this to "false" before a single real user touches it. /health
 # reports devAuth:true and a warning while it is on, so you cannot leave it
 # enabled without being told.
-DEV_AUTH = "true"
+# OFF (Oct 4): Google sign-in works, and three public pages on
+# reportbase.github.io now sign in here, so the stub would let anyone claim an
+# account and spend the key. Turn it back on only briefly, for local testing.
+DEV_AUTH = "false"
 
 # Cost guards on the request itself.
 ALLOWED_MODELS = ""            # empty = any model your key can reach
