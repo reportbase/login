@@ -159,7 +159,7 @@ If the two workloads diverge further, give the expensive one its own Worker with
 ## Tests
 
 ```bash
-npm test        # 29 tests, no network, no wrangler
+npm test        # 30 tests, no network, no wrangler
 ```
 
 The suite runs the Worker handler directly against a stubbed Anthropic and a **real SQLite** standing in for D1 (via `node:sqlite`), so the quota logic is exercised as actual SQL rather than against a fake that would accept anything. It covers session forgery and expiry, the open-redirect guard on `redirect_uri`, the full OAuth callback including wrong-audience and unverified-email rejection, popup `postMessage` targeting the app origin rather than `*`, per-user quota isolation, a **ten-way concurrent race** proving a spent allowance can't be beaten by parallel requests, per-user overrides and blocks, the burst limiter firing before any database work, and a timing assertion that SSE genuinely streams while usage is counted off a tee. The dev stub has its own set: that it contacts no provider, that `as=` really produces separate people with separate allowances, that it stays off unless `DEV_AUTH` is exactly `"true"`, that enabling it does not weaken the open-redirect guard, and that `/health` shouts while it is live.

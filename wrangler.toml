@@ -18,7 +18,12 @@ database_id = "94eaceab-16af-4375-921f-ddd26fb092c8"
 # both the CORS allowlist and the OAuth redirect allowlist — an unlisted origin
 # cannot receive a token, which is what stops this becoming an open redirect.
 #   https://app.example.com   exact          https://*.example.com   subdomains
-ALLOWED_ORIGINS = "https://tangent.fit,https://*.tangent.fit,http://localhost:8077"
+# https://reportbase.github.io is the owner's GitHub Pages site: games (the chess
+# coach), draw (the AI button) and 3d (describe it) all sign in from there. An
+# origin is only scheme + host, so this one entry covers every page under it.
+# NEVER widen it to https://*.github.io: that is every GitHub user's site, and any
+# of them could then sign people in and spend this gateway's key.
+ALLOWED_ORIGINS = "https://tangent.fit,https://*.tangent.fit,https://reportbase.github.io,http://localhost:8077"
 
 # Messages per signed-in user per UTC day. This is the real cost control.
 # Override one person in SQL: UPDATE users SET daily_limit = 500 WHERE email = '…';
