@@ -72,6 +72,15 @@ npx wrangler secret put APPLE_PRIVATE_KEY     # paste the whole .p8 contents
 
 Anything `false` there is your next job. It never echoes a secret.
 
+### Deploying on merge
+
+After the first setup, merging to `main` deploys automatically: the "Deploy" workflow in GitHub Actions runs the tests and then `wrangler deploy`. It needs one setting, made once:
+
+1. **A Cloudflare API token.** In the Cloudflare dashboard: **My Profile → API Tokens → Create Token → Edit Cloudflare Workers** template, **Account Resources** set to your account, **Zone Resources** to *All zones*, then **Continue to summary → Create Token**. (The token made for flare works here too, if you kept it.)
+2. **Give it to GitHub.** In this repo: **Settings → Secrets and variables → Actions → New repository secret**, named `CLOUDFLARE_API_TOKEN`.
+
+Until it is set, merges skip the deploy with a warning. A deploy can also be started from the **Actions** tab (Deploy → Run workflow). A deploy sends the code and `wrangler.toml`; the Worker's secrets and the D1 data are left as they are.
+
 ## Using it from the app
 
 ```html
