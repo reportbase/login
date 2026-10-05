@@ -147,9 +147,9 @@ With that set, dev sign-in without the right `token` is refused. It still proves
 
 ## Sharing one gateway across apps
 
-Two apps use this Worker, and their costs are not comparable: a chess coach comment is a few hundred tokens, while one AI drawing is up to 16000 output tokens plus an uploaded image — two or three orders of magnitude more. The daily limit counts **requests**, not cost, so fifty of each is not fifty of the same thing. Price `DEFAULT_DAILY_LIMIT` against the expensive one.
+Two apps use this Worker, and their costs are not comparable: a chess coach comment is a few hundred tokens, while one AI drawing is up to 16000 output tokens plus an uploaded image, and one 3d scene up to 64000 — two or three orders of magnitude more. The daily limit counts **requests**, not cost, so fifty of each is not fifty of the same thing. Price `DEFAULT_DAILY_LIMIT` against the expensive one.
 
-Two settings exist because of the drawing app, and both bite quietly if wrong. `MAX_TOKENS_CAP` is `16000`; requests above it are *clamped, not rejected*, so a cap set too low silently truncates an SVG mid-document instead of erroring. `MAX_BODY_BYTES` is 4 MB because a 768px canvas render arrives as base64 and blows past 256 KB immediately.
+Two settings exist because of the drawing app, and both bite quietly if wrong. `MAX_TOKENS_CAP` is `64000` (the 3d studio's scenes need it: Claude's thinking counts against the same limit as the reply); requests above it are *clamped, not rejected*, so a cap set too low silently truncates an SVG or a scene mid-document instead of erroring. `MAX_BODY_BYTES` is 4 MB because a 768px canvas render arrives as base64 and blows past 256 KB immediately.
 
 If the two workloads diverge further, give the expensive one its own Worker with its own limit and its own D1 — it is all config, and a second deployment is a `name` change away.
 

@@ -79,10 +79,14 @@ DEV_AUTH = "false"
 ALLOWED_MODELS = ""            # empty = any model your key can reach
 
 # Ceiling on max_tokens; requests above it are CLAMPED, not rejected — so a cap
-# set too low does not error, it silently truncates the answer. 16000 exists
-# because the SVG app asks for that much to draw a whole picture; a chess
-# comment uses a few hundred. Lower it and long generations get cut off mid-SVG.
-MAX_TOKENS_CAP = "16000"
+# set too low does not error, it silently truncates the answer. 64000 because
+# the 3d studio asks for a whole scene in one reply, and on Claude Opus 5.5 the
+# model's thinking (which cannot be turned off) counts against the same limit:
+# at 16000 a village with windows on every house ran out before its JSON closed
+# (Oct 5, "the answer ran out of room"). The SVG app needs 16000; a chess comment
+# a few hundred. Only tokens actually generated are billed, so a high cap costs
+# nothing on short answers. Lower it and long generations get cut off mid-reply.
+MAX_TOKENS_CAP = "64000"
 
 # Largest accepted request body. 4 MB because apps that send an image (the SVG
 # canvas goes up as a ~768px base64 PNG) blow straight past a 256 KB limit.
