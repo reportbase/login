@@ -651,3 +651,14 @@ test('wrangler.toml allows the GitHub Pages site and no other github.io', async 
   // Public pages sign in here now, so the no-password dev stub must stay off.
   assert.match(toml, /^DEV_AUTH\s*=\s*"false"/m, 'DEV_AUTH must be "false" in the deployed config');
 });
+
+/* The cap is clamped silently, so lowering it shows up only as answers cut off
+   mid-reply: the 3d studio's scenes need 64000 (Claude's thinking counts against
+   the same limit), the SVG app 16000. */
+test('wrangler.toml leaves room for a whole 3d scene', async () => {
+  const { readFileSync } = await import('node:fs');
+  const toml = readFileSync(new URL('../wrangler.toml', import.meta.url), 'utf8');
+  const m = toml.match(/^MAX_TOKENS_CAP\s*=\s*"(\d+)"/m);
+  assert.ok(m, 'MAX_TOKENS_CAP not found in wrangler.toml');
+  assert.ok(+m[1] >= 64000, 'MAX_TOKENS_CAP is ' + m[1] + '; the 3d studio asks for 64000');
+});
